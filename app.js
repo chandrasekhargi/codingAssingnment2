@@ -12,7 +12,7 @@ const bcrypt = require("bcrypt");
 
 const jwt = require("jsonwebtoken");
 
-const format = require("date-fns/format");
+// const format = require("date-fns/format");
 
 let database = null;
 
@@ -125,8 +125,12 @@ app.get("/user/tweets/feed/", authenticateToken, async (request, response) => {
   const query = `SELECT * FROM user WHERE username='${username}';`;
   const getUser = await database.get(query);
 
-  const getQuery = `SELECT user_id AS userId,tweet ,date_time AS dateTime
-   FROM tweet WHERE user_id='${getUser.user_id}';`;
+  const getQuery = `SELECT user.username,tweet.tweet,tweet.date_time AS dateTime  
+   FROM follower INNER JOIN tweet 
+   ON follower.following_user_id = tweet.user_id 
+   INNER JOIN user ON follower.following_user_id = user.user_id 
+    WHERE follower.follower_user_id='${getUser.user_id}' 
+    LIMIT 4 OFFSET 0;`;
   const dbResponse = await database.all(getQuery);
   response.send(dbResponse);
 });
@@ -163,14 +167,14 @@ app.post("/user/tweets/", authenticateToken, async (request, response) => {
   const { username } = request;
   const query = `SELECT user_id FROM user WHERE username='${username}';`;
   const loginUserId = await database.get(query);
-  const date = format(new Date(), "yyyy-MM-dd");
+  const date = new Date();
 
   const { tweet } = request.body;
   const tweetQuery = `INSERT INTO tweet(tweet,user_id,date_time)
     VALUES ('${tweet}','${loginUserId.user_id}','${date}')  ;`;
   const dbResponse = await database.run(tweetQuery);
   const newID = dbResponse.lastID;
-  response.send("Created a tweet");
+  response.send("Created a Tweet");
 });
 
 //Tweet Following
@@ -181,12 +185,9 @@ app.get("/tweets/:tweetId/", authenticateToken, async (request, response) => {
 
   const { tweetId } = request.params;
   const checkingLoginUserTweet = `SELECT 
-  tweet.tweet_id
-  FROM 
-  follower INNER JOIN tweet 
-  ON 
-  tweet.user_id = follower.follower_user_id
-  WHERE tweet.user_id=${loginUserId.user_id} GROUP BY tweet.tweet_id;`;
+  * FROM follower INNER JOIN tweet ON
+  follower.following_user_id = tweet.user_id
+  WHERE tweet.user_id=${loginUserId.user_id} ;`;
   const result = await database.all(checkingLoginUserTweet);
 
   const checkingTweet = result.map(
@@ -194,8 +195,8 @@ app.get("/tweets/:tweetId/", authenticateToken, async (request, response) => {
   );
 
   if (checkingTweet.includes(true)) {
-    const getLikes = `SELECT Count() AS likes FROM like 
-    WHERE tweet_id=${tweetId};`;
+    const getLikes = `SELECT COUNT() AS likes FROM like
+      WHERE tweet_id=${tweetId};`;
     const getResponse = await database.get(getLikes);
 
     const getReply = `SELECT COUNT() AS replies FROM reply WHERE tweet_id=${tweetId};`;
@@ -246,7 +247,7 @@ app.get(
       WHERE like.tweet_id=${tweetId};`;
       const getLikes = await database.all(likesUserQuery);
 
-      const namesList = getLikes.map((each) => each.username);
+      const namesList = getLikes.map((each) => each.name);
       const obj = {
         likes: namesList,
       };
